@@ -6,6 +6,17 @@ use Darinrandal\ChromeData\Response\ADSResponse;
 
 class ADS extends Request
 {
+    /**
+     * Performs a Automotive Description Service request to ChromeData by VIN (optionally trim and wheelbase)
+     * Returns an ADSResponse object to access and retrieve VIN data.
+     *
+     * @param string $vin
+     * @param null|string $trim
+     * @param null|string $wheelbase
+     * @return ADSResponse
+     * @throws \Darinrandal\ChromeData\Response\ResponseDecodeException
+     * @throws \HttpResponseException
+     */
     public function byVIN(string $vin, ?string $trim = null, ?string $wheelbase = null): ADSResponse
     {
         $response = $this->adapter->getConnection()->post('http://services.chromedata.com/Description/7a', [
@@ -19,6 +30,14 @@ class ADS extends Request
         return new ADSResponse($response);
     }
 
+    /**
+     * Returns the formatted XML after substituting VIN, Trim, Wheelbase, and credentials from the Auth adapter
+     *
+     * @param string $vin
+     * @param null|string $trim
+     * @param null|string $wheelbase
+     * @return string
+     */
     protected function getXml(string $vin, ?string $trim = null, ?string $wheelbase = null)
     {
         $this->adapter->getAuth()->getAccountNumber();

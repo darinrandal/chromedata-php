@@ -2,7 +2,7 @@
 
 namespace Darinrandal\ChromeData\Response;
 
-class ResponseDecodeException extends \HttpResponseException
+class ResponseDecodeException extends \Exception
 {
 
 }
