@@ -1,0 +1,31 @@
+{
+  "name": "darinrandal/chromedata-sdk",
+  "description": "PHP API binding for ChromeData ADS and Incentives",
+  "type": "library",
+  "require": {
+    "guzzlehttp/guzzle": "^6.2.2",
+    "php": ">=7.0.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "5.7.5",
+    "phpmd/phpmd" : "@stable",
+    "friendsofphp/php-cs-fixer": "^2.6"
+  },
+  "license": "MIT License",
+  "authors": [
+    {
+      "name": "Darin Randal",
+      "email": "darin.randal@gmail.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Darinrandal\\ChromeData\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "classmap": [
+      "tests/"
+    ]
+  }
+}
