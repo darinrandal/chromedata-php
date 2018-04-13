@@ -27,6 +27,10 @@ class ADSResponse
      */
     protected $preferredStyle;
 
+    protected $matchedStyle;
+
+    protected $vehicle;
+
     /**
      * 320x240 images
      */
@@ -60,17 +64,21 @@ class ADSResponse
     /**
      * ADSResponse constructor.
      * @param ResponseInterface $rawResponse
+     * @param array $vehicle
      * @throws ResponseDecodeException
      * @throws \HttpResponseException
      */
-    public function __construct(ResponseInterface $rawResponse)
+    public function __construct(ResponseInterface $rawResponse, array $vehicle = [])
     {
         $this->rawResponse = $rawResponse;
+
+        $this->vehicle = $vehicle;
 
         $this->xml = $this->convertToXmlObject($rawResponse->getBody()->getContents());
 
         if ($this->stylesCount() === 1) {
             $this->preferredStyle = key($this->styles());
+            $this->matchedStyle = current($this->styles());
         }
     }
 
@@ -117,6 +125,10 @@ class ADSResponse
             }
         }
 
+        /*
+         * If we've been provided a color and there's more than 3 images that match
+         * Only use the images that do not have a secondaryColorCode (otherwise you'll get duplicates)
+         */
         if ($ADSColor && count($images) > 3) {
             $images = array_filter($images, function ($value) {
                 return $value['secondaryColorCode'] === '';
@@ -128,6 +140,31 @@ class ADSResponse
         });
 
         return $images;
+    }
+
+    public function vehicleYear(): ?string
+    {
+        return $this->matchedStyle['year'] ?? null;
+    }
+
+    public function vehicleMake(): ?string
+    {
+        return $this->matchedStyle['make'] ?? null;
+    }
+
+    public function vehicleModel(): ?string
+    {
+        return $this->matchedStyle['model'] ?? null;
+    }
+
+    public function vehicleTrim(): ?string
+    {
+        return $this->matchedStyle['trim'] ?? null;
+    }
+
+    public function vehicleDrivetrain(): ?string
+    {
+        return $this->matchedStyle['drivetrain'] ?? null;
     }
 
     /**
@@ -175,8 +212,16 @@ class ADSResponse
      * @param null|string $colorCode
      * @return ADSColor
      */
-    public function findMatchingColor(string $colorName, ?string $colorCode = null)
+    public function matchExteriorColor(?string $colorName = null, ?string $colorCode = null)
     {
+        if ($colorName === null) {
+            $colorName = $this->vehicle['exterior_color'] ?? null;
+
+            if ($colorName === null) {
+                throw new \InvalidArgumentException('No color provided');
+            }
+        }
+
         $matchedExtColors = [];
         $possibleMatchedExtColors = [];
 
@@ -219,6 +264,8 @@ class ADSResponse
             return new ADSColor($matchedExtColors[0]);
         } elseif (count($possibleMatchedExtColors) === 1) {
             return new ADSColor($possibleMatchedExtColors[0]);
+        } elseif (count($possibleMatchedExtColors) > 1) {
+            throw new \InvalidArgumentException($colorName . ' matched ' . count($possibleMatchedExtColors) . ' colors: ');
         }
 
         throw new \InvalidArgumentException($colorName . ' was not able to match any available colors');
@@ -247,6 +294,10 @@ class ADSResponse
             $styles[(int) $style['id']] = [
                 'id' => (int) $style['id'],
                 'name' => (string) $style['nameWoTrim'],
+                'year' => (string) $style['modelYear'],
+                'make' => (string) $style->division,
+                'model' => (string) $style->model,
+                'trim' => (string) $style['trim'],
                 'body' => (string) $style['altBodyType'],
                 'doors' => (string) $style['passDoors'],
                 'drivetrain' => (string) $style['drivetrain'],
