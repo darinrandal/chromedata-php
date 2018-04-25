@@ -2,6 +2,7 @@
 
 namespace Darinrandal\ChromeData\Request;
 
+use Darinrandal\ChromeData\Adapter\Adapter;
 use Darinrandal\ChromeData\Response\ADSResponse;
 
 class ADS extends Request
@@ -9,83 +10,69 @@ class ADS extends Request
     /**
      * Automotive Description Service Endpoint
      */
-    const ADS_ENDPOINT = 'http://services.chromedata.com/Description/7a';
+    const ADS_ENDPOINT = 'http://services.chromedata.com/Description/7b?wsdl';
 
-    protected $vehicle = [];
+    protected $parameters = [];
+
+    protected $client;
+
+    public function __construct(Adapter $adapter)
+    {
+        parent::__construct($adapter);
+
+        $this->client = new \SoapClient(static::ADS_ENDPOINT, [
+            'trace' => 1,
+            'cache_wsdl' => WSDL_CACHE_NONE,
+            'user_agent' => 'Remora ADS Fetcher',
+        ]);
+    }
 
     /**
      * Performs a Automotive Description Service request to ChromeData by VIN
      * Returns an ADSResponse object to access and retrieve VIN data.
      *
-     * Pass in an array of vehicle data to increase the change of an exact-match style
-     * ['trim' => 'Lariat', 'wheelbase' => 157, 'exterior_color' => 'White Metallic', 'drivetrain' => 'AWD']
+     * Pass in an array of vehicle data to increase the change of an exact-match style. Uses ChromeData Parameters
+     * from docs: trimName, manufacturerModelCode, wheelBase, OEMOptionCode, exteriorColorName, interiorColorName,
+     * styleName, reducingStyleID, reducingAcode
      *
      * @param string $vin
-     * @param array $vehicle
+     * @param array $parameters
      * @return ADSResponse
      * @throws \Darinrandal\ChromeData\Response\ResponseDecodeException
      * @throws \HttpResponseException
      */
     public function byVIN(
         string $vin,
-        array $vehicle = []
+        array $parameters = []
     ): ADSResponse
     {
         if (!$this->validateVIN($vin)) {
             throw new \InvalidArgumentException('VIN doesn\'t pass checksum validation: ' . $vin);
         }
 
-        $this->vehicle = $vehicle;
+        $this->parameters = array_merge($this->parameters, $parameters);
 
-        $response = $this->adapter->getConnection()->post(static::ADS_ENDPOINT, [
-            'headers' => [
-                'MIME-Version: 1.0',
-                'Content-Type: text/xml; charset=utf-8'
-            ],
-            'body' => $this->getXml($vin, $this->vehicle['trim'] ?? '', $this->vehicle['wheelbase'] ?? ''),
-        ]);
+        $response = $this->dispatchRequest($vin);
 
-        return new ADSResponse($response, $vehicle);
+//        var_dump($response);die;
+
+        return new ADSResponse($response, $parameters);
     }
 
     /**
      * Returns the formatted XML after substituting VIN, Trim, Wheelbase, and credentials from the Auth adapter
      *
      * @param string $vin
-     * @param null|string $trim
-     * @param null|string $wheelbase
      * @return string
      */
-    protected function getXml(string $vin, ?string $trim = null, ?string $wheelbase = null)
+    protected function dispatchRequest(string $vin)
     {
-        $this->adapter->getAuth()->getAccountNumber();
+        return $this->client->describeVehicle($this->buildParameterArray($vin));
+    }
 
-        // Request needs Wheelbase set to 0 to not use it
-        if (empty($wheelbase)) {
-            $wheelbase = '0';
-        }
-
-        return <<<XML
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:description7a.services.chrome.com">
-    <soapenv:Header/>
-    <soapenv:Body>
-        <urn:VehicleDescriptionRequest>
-            <urn:accountInfo 
-                number="{$this->adapter->getAuth()->getAccountNumber()}" 
-                secret="{$this->adapter->getAuth()->getAccountSecret()}" 
-                country="US" language="en" behalfOf="?"/>
-            <urn:vin>{$vin}</urn:vin>
-            <urn:trimName>{$trim}</urn:trimName>
-            <urn:wheelBase>{$wheelbase}</urn:wheelBase>
-            <urn:switch>ShowAvailableEquipment</urn:switch>
-            <urn:switch>ShowExtendedDescriptions</urn:switch>
-            <urn:vehicleProcessMode>ExcludeFleetOnly</urn:vehicleProcessMode>
-            <urn:optionsProcessMode>ExcludeFleetOnly</urn:optionsProcessMode>
-            <urn:includeMediaGallery>ColorMatch</urn:includeMediaGallery>
-        </urn:VehicleDescriptionRequest>
-    </soapenv:Body>
-</soapenv:Envelope>
-XML;
+    public function getSoapClient()
+    {
+        return $this->client;
     }
 
     /**
@@ -124,5 +111,50 @@ XML;
         $checkDigit = $sum % 11;
 
         return ($checkDigit === 10 ? 'x' : $checkDigit) == $vin{8};
+    }
+
+    public function includeColorMatchedPhotos()
+    {
+        $this->parameters['includeMediaGallery'] = 'ColorMatch';
+
+        return $this;
+    }
+
+    public function includeAvailableEquipment()
+    {
+        $this->parameters['switch'][] = 'ShowAvailableEquipment';
+
+        return $this;
+    }
+
+    public function includeExtendedDescriptions()
+    {
+        $this->parameters['switch'][] = 'ShowExtendedDescriptions';
+
+        return $this;
+    }
+
+    public function excludeFleet()
+    {
+        $this->parameters['vehicleProcessMode'] = 'ExcludeFleetOnly';
+        $this->parameters['optionsProcessMode'] = 'ExcludeFleetOnly';
+
+        return $this;
+    }
+
+    protected function buildParameterArray(string $vin)
+    {
+        return array_merge($this->parameters, [
+            'accountInfo' => [
+                'number' => $this->adapter->getAuth()->getAccountNumber(),
+                'secret' => $this->adapter->getAuth()->getAccountSecret(),
+                'country' => 'US',
+                'language' => 'en',
+            ],
+            'vin' => $vin,
+            'switch' => [
+                'ShowExtendedDescriptions',
+            ],
+        ]);
     }
 }

@@ -11,21 +11,7 @@ class ADSResponse
      *
      * @var ResponseInterface
      */
-    protected $rawResponse;
-
-    /**
-     * Stores the SimpleXML object for data retrieval
-     *
-     * @var \SimpleXMLElement
-     */
-    protected $xml;
-
-    /**
-     * Chrome StyleId of the working style.
-     *
-     * @var int|null
-     */
-    protected $preferredStyle;
+    protected $response;
 
     protected $matchedStyle;
 
@@ -63,212 +49,134 @@ class ADSResponse
 
     /**
      * ADSResponse constructor.
-     * @param ResponseInterface $rawResponse
+     * @param \StdClass $response
      * @param array $vehicle
-     * @throws ResponseDecodeException
-     * @throws \HttpResponseException
      */
-    public function __construct(ResponseInterface $rawResponse, array $vehicle = [])
+    public function __construct(\stdClass $response, array $vehicle = [])
     {
-        $this->rawResponse = $rawResponse;
+        $this->response = $response;
 
         $this->vehicle = $vehicle;
-
-        $this->xml = $this->convertToXmlObject($rawResponse->getBody()->getContents());
-
-        if ($this->stylesCount() === 1) {
-            $this->preferredStyle = key($this->styles());
-            $this->matchedStyle = current($this->styles());
-        }
     }
 
     /**
      * Returns an array of color-matched photos. Requires ADSColor parameter returned from findMatchingColors($color)
      *
-     * @param ADSColor|null $ADSColor
      * @param int $width
      * @param string $background
      * @return array
      */
-    public function colorMatchedPhotos(
-        ?ADSColor $ADSColor = null,
+    public function photos(
         int $width = self::PHOTO_SIZE_MEDIUM,
         string $background = self::PHOTO_BACKGROUND_TRANSPARENT
     ): array
     {
         $images = [];
 
-        foreach ($this->xml->style as $style) {
-            if ($this->preferredStyle && (int) $style['id'] != $this->preferredStyle) {
+        foreach ($this->response->style->mediaGallery->colorized as $color) {
+            if (
+                // Images are labeled with a match bool flag whenever they made the color sent in
+                empty($color->match) ||
+                $color->backgroundDescription !== $background ||
+                $color->width !== $width
+            ) {
                 continue;
             }
 
-            if (!$style->mediaGallery->colorized->count()) {
-                continue;
-            }
-
-            foreach ($style->mediaGallery->colorized as $color) {
-                if ((string) $color['backgroundDescription'] != $background || (int) $color['width'] != $width) {
-                    continue;
-                }
-
-                if ($ADSColor && $ADSColor->getColorCode() != (string) $color['primaryColorOptionCode']) {
-                    continue;
-                }
-
-                $images[] = [
-                    'colorCode' => (string) $color['primaryColorOptionCode'],
-                    'shot' => (int) $color['shotCode'],
-                    'url' => (string) $color['url'],
-                    'secondaryColorCode' => (string) $color['secondaryColorOptionCode'],
-                ];
-            }
+            $images[] = (array) $color;
         }
 
         /*
          * If we've been provided a color and there's more than 3 images that match
          * Only use the images that do not have a secondaryColorCode (otherwise you'll get duplicates)
          */
-        if ($ADSColor && count($images) > 3) {
+        if (count($images) > 3) {
             $images = array_filter($images, function ($value) {
-                return $value['secondaryColorCode'] === '';
+                return !isset($value['secondaryColorOptionCode']);
             });
         }
 
         usort($images, function ($a, $b) {
-            return $a['shot'] <=> $b['shot'];
+            return $a['shotCode'] <=> $b['shotCode'];
         });
 
         return $images;
     }
 
-    public function vehicleYear(): ?string
+    public function color(): ?ADSColor
     {
-        return $this->matchedStyle['year'] ?? null;
+        return new ADSColor($this->response->exteriorColor);
     }
 
-    public function vehicleMake(): ?string
+    public function doors(): ?int
     {
-        return $this->matchedStyle['make'] ?? null;
+        return $this->response->style->passDoors ?? null;
     }
 
-    public function vehicleModel(): ?string
+    public function year(): ?string
     {
-        return $this->matchedStyle['model'] ?? null;
+        return $this->response->style->modelYear ?? null;
     }
 
-    public function vehicleTrim(): ?string
+    public function make(): ?string
     {
-        return $this->matchedStyle['trim'] ?? null;
+        return $this->response->style->division->_ ?? null;
     }
 
-    public function vehicleDrivetrain(): ?string
+    public function model(): ?string
     {
-        return $this->matchedStyle['drivetrain'] ?? null;
+        return $this->response->style->model->_ ?? null;
     }
 
-    /**
-     * Get the count of exterior colors available
-     *
-     * @return int
-     */
-    public function exteriorColorsCount(): int
+    public function bodyStyle(): ?array
     {
-        return $this->xml->exteriorColor->count();
+        $bodyTypes = [
+            $this->response->style->altBodyType ?? null,
+        ];
+
+        foreach ((array) $this->response->style->bodyType as $bodyType) {
+            $bodyTypes[] = $bodyType->_;
+        }
+
+        return $bodyTypes;
     }
 
-    /**
-     * Returns an array of all available exterior colors
-     *
-     * @return array
-     */
-    public function exteriorColors(): array
+    public function trim(): ?string
     {
-        $exteriorColors = [];
+        return $this->response->style->trim ?? null;
+    }
 
-        foreach ($this->xml->exteriorColor as $color) {
-            // Skip any exterior colors that don't match our style id
-            if ($this->preferredStyle && (int) $color->styleId != $this->preferredStyle) {
-                continue;
-            }
+    public function drivetrain(): ?string
+    {
+        return $this->response->style->drivetrain ?? null;
+    }
 
-            $exteriorColors[] = [
-                'code' => (string) $color['colorCode'],
-                'name' => (string) $color['colorName'],
-                'generic' => (string) $color->genericColor['name'],
+    public function styleName(): ?string
+    {
+        return $this->response->style->name ?? null;
+    }
+
+    public function styleId(): ?int
+    {
+        return $this->response->style->id ?? null;
+    }
+
+    public function factoryOptions(): ?array
+    {
+        $options = [];
+
+        foreach ($this->response->factoryOption as $option) {
+            $options[] = [
+                'name' => is_array($option->description) ? $option->description[0] : $option->description,
+                'description' => is_array($option->description) ? $option->description[1] : null,
+                'code' => $option->altOptionCode ?? null,
+                'chromeCode' => $option->chromeCode ?? null,
+                'oemCode' => $option->oemCode ?? null,
+                'price' => $option->price->msrpMax ?? null,
             ];
         }
 
-        return $exteriorColors;
-    }
-
-    /**
-     * Find matching ExteriorColor objects by a color name and (optionally) color code. Returns an ADSColor
-     * object used by colorMatchedPhotos.
-     *
-     * $colorName can be a generic color name, color code, or brand-specific color such as Banana Pearl Metallic
-     *
-     * @param string $colorName
-     * @param null|string $colorCode
-     * @return ADSColor
-     */
-    public function matchExteriorColor(?string $colorName = null, ?string $colorCode = null)
-    {
-        if ($colorName === null) {
-            $colorName = $this->vehicle['exterior_color'] ?? null;
-
-            if ($colorName === null) {
-                throw new \InvalidArgumentException('No color provided');
-            }
-        }
-
-        $matchedExtColors = [];
-        $possibleMatchedExtColors = [];
-
-        foreach ($this->xml->exteriorColor as $extColor) {
-            // Skip any exterior colors that don't match our style id
-            if ($this->preferredStyle && (int) $extColor->styleId != $this->preferredStyle) {
-                continue;
-            }
-
-            $extColorCode = trim(strtolower($extColor['colorCode']));
-            $extColorName = trim(strtolower($extColor['colorName']));
-
-            // Default to something that'll have no matches for the strpos (it needs a non-empty needle)
-            $vehicleExtColor = trim(strtolower($colorName)) ?: '****';
-            $vehicleExtColorCode = trim(strtolower($colorCode)) ?: strtok($vehicleExtColor, '/');
-
-            if ($vehicleExtColor == $extColorName ||
-                $vehicleExtColor == $extColorCode ||
-                $vehicleExtColorCode == $extColorName ||
-                $vehicleExtColorCode == $extColorCode
-            ) {
-                $matchedExtColors[] = $extColor;
-            }
-
-            // Hack to fix incoming data. Some color codes have weird styles
-            if (str_replace(['0', 'o'], ['o', '0'], $vehicleExtColor) == $extColorName ||
-                str_replace(['0', 'o'], ['o', '0'], $vehicleExtColor) == $extColorCode ||
-                str_replace(['0', 'o'], ['o', '0'], $vehicleExtColorCode) == $extColorName ||
-                str_replace(['0', 'o'], ['o', '0'], $vehicleExtColorCode) == $extColorCode ||
-                strpos($extColorName, $vehicleExtColor) !== false ||
-                strpos($extColorCode, $vehicleExtColor) !== false ||
-                strpos($extColorName, $vehicleExtColorCode) !== false ||
-                strpos($extColorCode, $vehicleExtColorCode) !== false
-            ) {
-                $possibleMatchedExtColors[] = $extColor;
-            }
-        }
-
-        if (count($matchedExtColors) === 1) {
-            return new ADSColor($matchedExtColors[0]);
-        } elseif (count($possibleMatchedExtColors) === 1) {
-            return new ADSColor($possibleMatchedExtColors[0]);
-        } elseif (count($possibleMatchedExtColors) > 1) {
-            throw new \InvalidArgumentException($colorName . ' matched ' . count($possibleMatchedExtColors) . ' colors: ');
-        }
-
-        throw new \InvalidArgumentException($colorName . ' was not able to match any available colors');
+        return $options;
     }
 
     /**
@@ -278,98 +186,11 @@ class ADSResponse
      */
     public function stylesCount(): int
     {
-        return $this->xml->style->count();
+        return is_array($this->response->style) ? count($this->response->style) : 1;
     }
 
-    /**
-     * Returns an array of styles indexed by ID for the vehicle
-     *
-     * @return array
-     */
-    public function styles(): array
+    public function exactMatchStyle(): bool
     {
-        $styles = [];
-
-        foreach ($this->xml->style as $style) {
-            $styles[(int) $style['id']] = [
-                'id' => (int) $style['id'],
-                'name' => (string) $style['nameWoTrim'],
-                'year' => (string) $style['modelYear'],
-                'make' => (string) $style->division,
-                'model' => (string) $style->model,
-                'trim' => (string) $style['trim'],
-                'body' => (string) $style['altBodyType'],
-                'doors' => (string) $style['passDoors'],
-                'drivetrain' => (string) $style['drivetrain'],
-            ];
-        }
-
-        return $styles;
-    }
-
-    /**
-     * Get Preferred Style Id used to determine what features, images, and packages a vehicle qualifies for
-     *
-     * @return int|null
-     */
-    public function getPreferredStyle(): ?int
-    {
-        return $this->preferredStyle;
-    }
-
-    /**
-     * Set Preferred Style Id used to determine what features, images, and packages a vehicle qualifies for
-     *
-     * @param int $preferredStyle
-     * @return bool
-     */
-    public function setPreferredStyle(int $preferredStyle): bool
-    {
-        if (! isset($this->styles()[$preferredStyle])) {
-            return false;
-        }
-
-        $this->preferredStyle = $preferredStyle;
-
-        return true;
-    }
-
-    /**
-     * Converts string XML response to SimpleXMLObject for iteration and data retrieval
-     *
-     * @param string $chromeXml
-     * @return \SimpleXMLElement
-     * @throws ResponseDecodeException
-     * @throws \HttpResponseException
-     */
-    private function convertToXmlObject(string $chromeXml)
-    {
-        $bodyStart = strpos($chromeXml, "<S:Body>") + 8;
-        $bodyEnd = strrpos($chromeXml, "</S:Body>");
-
-        if ($bodyStart <= 0 || $bodyEnd <= 0) {
-            throw new ResponseDecodeException('ChromeDataADS: Failure to determine body start');
-        }
-
-        try {
-            $xmlObject = new \SimpleXMLElement(substr($chromeXml, $bodyStart, $bodyEnd - $bodyStart), LIBXML_NOWARNING);
-        } catch (\Exception $e) {
-            $bodyStart = strpos($chromeXml, '<faultstring>') + 13;
-            $bodyEnd = strrpos($chromeXml, "</faultstring>");
-
-            throw new ResponseDecodeException('ChromeDataADS: Error received from server: ' . substr($chromeXml, $bodyStart, $bodyEnd - $bodyStart));
-        }
-
-        if (isset($xmlObject->responseStatus['responseCode']) && strtolower((string) $xmlObject->responseStatus['responseCode']) == 'unsuccessful') {
-            if (is_array($xmlObject->responseStatus->status)) {
-                $status = (string) current($xmlObject->responseStatus->status);
-            } else {
-                $status = (string) $xmlObject->responseStatus->status;
-            }
-
-            throw new \HttpResponseException('ChromeDataADS: Unsuccessful request: ' . $status);
-        }
-
-        return $xmlObject;
+        return $this->stylesCount() === 1;
     }
 }

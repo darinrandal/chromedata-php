@@ -29,13 +29,13 @@ class ADSColor
      * Pass in a SimpleXMLElement for the exteriorColors object and get back a ADSColor object.
      *
      * ADSColor constructor.
-     * @param \SimpleXMLElement $colorElement
+     * @param \stdClass $colorElement
      */
-    public function __construct(\SimpleXMLElement $colorElement)
+    public function __construct(\stdClass $colorElement)
     {
-        $this->colorCode = (string) $colorElement['colorCode'];
-        $this->colorName = (string) $colorElement['colorName'];
-        $this->colorBase = (string) $colorElement->genericColor['name'];
+        $this->colorCode = $colorElement->colorCode;
+        $this->colorName = $colorElement->colorName;
+        $this->colorBase = $colorElement->genericColor->name;
     }
 
     /**
@@ -75,10 +75,15 @@ class ADSColor
      */
     public function __toString(): string
     {
-        return json_encode([
+        return json_encode($this->toArray());
+    }
+
+    public function toArray(): array
+    {
+        return [
             'colorCode' => $this->colorCode,
             'colorName' => $this->colorName,
             'colorBase' => $this->colorBase,
-        ]);
+        ];
     }
 }
