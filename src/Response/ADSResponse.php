@@ -193,4 +193,50 @@ class ADSResponse
     {
         return $this->stylesCount() === 1;
     }
+
+    /**
+     * Takes provided drivetrain and standardizes it to a 3 letter abbreviation
+     * @param string $drivetrain Drivetrain provided for a vehicle
+     * @return string
+     */
+    public static function convertDrivetrain(?string $drivetrain): ?string
+    {
+        $drivetrain = trim(strtolower($drivetrain));
+
+        if (!$drivetrain) {
+            return null;
+        }
+
+        if (strlen($drivetrain) > 3) {
+            if (static::startsWith($drivetrain, 'front')) {
+                $drivetrain = 'fwd';
+            } elseif (static::startsWith($drivetrain, 'rear')) {
+                $drivetrain = 'rwd';
+            } elseif (static::startsWith($drivetrain, 'four')) {
+                $drivetrain = '4x4';
+            } elseif (static::startsWith($drivetrain, 'all')) {
+                $drivetrain = 'awd';
+            }
+        }
+
+        return strtoupper(in_array(strtolower($drivetrain), ['4wd', '4x4']) ? '4X4' : $drivetrain);
+    }
+
+    /**
+     * Determine if a given string starts with a given substring.
+     *
+     * @param  string  $haystack
+     * @param  string|array  $needles
+     * @return bool
+     */
+    public static function startsWith($haystack, $needles)
+    {
+        foreach ((array) $needles as $needle) {
+            if ($needle !== '' && substr($haystack, 0, strlen($needle)) === (string) $needle) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
