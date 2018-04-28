@@ -4,6 +4,11 @@ namespace Darinrandal\ChromeData\Request;
 
 use Darinrandal\ChromeData\Adapter\Adapter;
 use Darinrandal\ChromeData\Response\ADSResponse;
+use GuzzleHttp\Client;
+use function GuzzleHttp\Promise\each_limit;
+use function GuzzleHttp\Promise\iter_for;
+use GuzzleHttp\Promise\PromiseInterface;
+use Meng\AsyncSoap\Guzzle\Factory;
 
 class ADS extends Request
 {
@@ -20,11 +25,7 @@ class ADS extends Request
     {
         parent::__construct($adapter);
 
-        $this->client = new \SoapClient(static::ADS_ENDPOINT, [
-            'trace' => 1,
-            'cache_wsdl' => WSDL_CACHE_NONE,
-            'user_agent' => 'Remora ADS Fetcher',
-        ]);
+        $this->client = (new Factory())->create(new Client(), static::ADS_ENDPOINT);
     }
 
     /**
@@ -38,36 +39,49 @@ class ADS extends Request
      * @param string $vin
      * @param array $parameters
      * @return ADSResponse
-     * @throws \Darinrandal\ChromeData\Response\ResponseDecodeException
-     * @throws \HttpResponseException
      */
-    public function byVIN(
+    public function byVin(
         string $vin,
         array $parameters = []
     ): ADSResponse
     {
-        if (!$this->validateVIN($vin)) {
-            throw new \InvalidArgumentException('VIN doesn\'t pass checksum validation: ' . $vin);
-        }
+        $promise = $this->byVinAsync($vin, $parameters);
 
-        $this->parameters = array_merge($this->parameters, $parameters);
-
-        $response = $this->dispatchRequest($vin);
-
-//        var_dump($response);die;
-
-        return new ADSResponse($response, $parameters);
+        return new ADSResponse($promise->wait(), $parameters);
     }
 
     /**
-     * Returns the formatted XML after substituting VIN, Trim, Wheelbase, and credentials from the Auth adapter
+     * Performs an ADS request to ChromeData by VIN returning a Promise for async. Use with $this->pool()
      *
      * @param string $vin
-     * @return string
+     * @param array $parameters
+     * @return PromiseInterface
      */
-    protected function dispatchRequest(string $vin)
+    public function byVinAsync(
+        string $vin,
+        array $parameters = []
+    ): PromiseInterface
     {
-        return $this->client->describeVehicle($this->buildParameterArray($vin));
+        return $this->client->describeVehicle($this->buildParameterArray($vin, $parameters));
+    }
+
+    /**
+     * Pools a set of async requests together at a specified concurrency and waits for completion.
+     * $requests can be a generator, array, or iterable object
+     *
+     * $fulfilled receives an ADSResponse object as the first parameter
+     *
+     * @param $requests
+     * @param callable $fulfilled
+     * @param callable $rejected
+     * @param int $concurrency
+     * @return mixed
+     */
+    public function pool($requests, callable $fulfilled, callable $rejected, int $concurrency = 15)
+    {
+        return each_limit(iter_for($requests), $concurrency, function ($response) use ($fulfilled) {
+            $fulfilled(new ADSResponse($response));
+        }, $rejected)->wait();
     }
 
     public function getSoapClient()
@@ -142,7 +156,7 @@ class ADS extends Request
         return $this;
     }
 
-    protected function buildParameterArray(string $vin)
+    protected function buildParameterArray(string $vin, array $parameters = [])
     {
         return array_merge($this->parameters, [
             'accountInfo' => [
@@ -155,6 +169,6 @@ class ADS extends Request
             'switch' => [
                 'ShowExtendedDescriptions',
             ],
-        ]);
+        ], $parameters);
     }
 }

@@ -103,6 +103,11 @@ class ADSResponse
         return $images;
     }
 
+    public function name(): ?string
+    {
+        return $this->year() . ' ' . $this->make() . ' ' . $this->model() . ' ' . $this->styleName();
+    }
+
     public function color(): ?ADSColor
     {
         return new ADSColor($this->response->exteriorColor);
