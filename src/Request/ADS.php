@@ -221,6 +221,7 @@ class ADS extends Request
                 'ShowConsumerInformation',
                 'ShowExtendedTechnicalSpecifications',
                 'IncludeDefinitions',
+                'ShowAvailableEquipment',
             ],
         ], $parameters);
     }

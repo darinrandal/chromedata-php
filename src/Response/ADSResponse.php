@@ -115,7 +115,15 @@ class ADSResponse
 
     public function color(): ?ADSColor
     {
-        return new ADSColor($this->response->exteriorColor);
+        $color = null;
+
+        foreach ($this->response->exteriorColor as $exteriorColor) {
+            if (!empty($exteriorColor->installed)) {
+                $color = $exteriorColor;
+            }
+        }
+
+        return $color ? new ADSColor($color) : $color;
     }
 
     public function doors(): ?int
@@ -175,6 +183,34 @@ class ADSResponse
         }
 
         return $standardFeatures;
+    }
+
+    public function genericEquipment(): array
+    {
+        $genericEquipment = [];
+
+        foreach ($this->response->genericEquipment as $equipment) {
+            $genericEquipment[$equipment->definition->group->_][$equipment->definition->header->_][] = $equipment->definition->category->_;
+        }
+
+        return $genericEquipment;
+    }
+
+    public function consumerInfo(): array
+    {
+        $consumerInfo = [];
+
+        foreach ($this->response->consumerInformation as $info) {
+            $items = [];
+
+            foreach ((array) $info->item as $item) {
+                $items[] = $item->name . ': ' . $item->value;
+            }
+
+            $consumerInfo[$info->type->_] = $items;
+        }
+
+        return $consumerInfo;
     }
 
     public function bodyStyle(): ?array
