@@ -17,10 +17,22 @@ class ADS extends Request
      */
     const ADS_ENDPOINT = 'http://services.chromedata.com/Description/7b?wsdl';
 
+    /**
+     * @var array
+     */
     protected $parameters = [];
 
+    /**
+     * Holds the handle to the SoapClientInterface
+     *
+     * @var \Meng\AsyncSoap\SoapClientInterface
+     */
     protected $client;
 
+    /**
+     * ADS constructor.
+     * @param Adapter $adapter
+     */
     public function __construct(Adapter $adapter)
     {
         parent::__construct($adapter);
@@ -75,16 +87,27 @@ class ADS extends Request
      * @param callable $fulfilled
      * @param callable $rejected
      * @param int $concurrency
-     * @return mixed
      */
-    public function pool($requests, callable $fulfilled, callable $rejected, int $concurrency = 15)
+    public function pool(
+        $requests,
+        callable $fulfilled,
+        callable $rejected,
+        int $concurrency = 15
+    ): void
     {
-        return each_limit(iter_for($requests), $concurrency, function ($response) use ($fulfilled) {
-            $fulfilled(new ADSResponse($response));
+        each_limit(iter_for($requests), $concurrency, function ($response, $idx, $aggregate) use ($fulfilled) {
+            call_user_func_array($fulfilled, [
+                new ADSResponse($response),
+                $idx,
+                $aggregate
+            ]);
         }, $rejected)->wait();
     }
 
-    public function getSoapClient()
+    /**
+     * @return \Meng\AsyncSoap\SoapClientInterface
+     */
+    public function getClient()
     {
         return $this->client;
     }
@@ -95,7 +118,7 @@ class ADS extends Request
      * @param string $vin
      * @return bool
      */
-    protected function validateVIN(string $vin): bool
+    protected function validateVin(string $vin): bool
     {
         $vin = strtolower($vin);
 
@@ -127,6 +150,11 @@ class ADS extends Request
         return ($checkDigit === 10 ? 'x' : $checkDigit) == $vin{8};
     }
 
+    /**
+     * Add color matched photos in response
+     *
+     * @return $this
+     */
     public function includeColorMatchedPhotos()
     {
         $this->parameters['includeMediaGallery'] = 'ColorMatch';
@@ -134,6 +162,11 @@ class ADS extends Request
         return $this;
     }
 
+    /**
+     * Add available equipment in response
+     *
+     * @return $this
+     */
     public function includeAvailableEquipment()
     {
         $this->parameters['switch'][] = 'ShowAvailableEquipment';
@@ -141,6 +174,11 @@ class ADS extends Request
         return $this;
     }
 
+    /**
+     * Include extended descriptions Chrome options
+     *
+     * @return $this
+     */
     public function includeExtendedDescriptions()
     {
         $this->parameters['switch'][] = 'ShowExtendedDescriptions';
@@ -148,6 +186,11 @@ class ADS extends Request
         return $this;
     }
 
+    /**
+     * Exclude fleet vehicle from the request
+     *
+     * @return $this
+     */
     public function excludeFleet()
     {
         $this->parameters['vehicleProcessMode'] = 'ExcludeFleetOnly';
@@ -156,6 +199,13 @@ class ADS extends Request
         return $this;
     }
 
+    /**
+     * Merges auth data, custom parameters, and set global parameters on the request data
+     *
+     * @param string $vin
+     * @param array $parameters
+     * @return array
+     */
     protected function buildParameterArray(string $vin, array $parameters = [])
     {
         return array_merge($this->parameters, [
@@ -168,6 +218,9 @@ class ADS extends Request
             'vin' => $vin,
             'switch' => [
                 'ShowExtendedDescriptions',
+                'ShowConsumerInformation',
+                'ShowExtendedTechnicalSpecifications',
+                'IncludeDefinitions',
             ],
         ], $parameters);
     }

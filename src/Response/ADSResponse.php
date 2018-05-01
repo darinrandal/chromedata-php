@@ -17,6 +17,8 @@ class ADSResponse
 
     protected $vehicle;
 
+    protected $status;
+
     /**
      * 320x240 images
      */
@@ -51,10 +53,13 @@ class ADSResponse
      * ADSResponse constructor.
      * @param \StdClass $response
      * @param array $vehicle
+     * @throws ChromeDataRequestException
      */
     public function __construct(\stdClass $response, array $vehicle = [])
     {
         $this->response = $response;
+
+        $this->status = $response->responseStatus->responseCode ?? 'Unsuccessful';
 
         $this->vehicle = $vehicle;
     }
@@ -105,7 +110,7 @@ class ADSResponse
 
     public function name(): ?string
     {
-        return $this->year() . ' ' . $this->make() . ' ' . $this->model() . ' ' . $this->styleName();
+        return implode(' ', array_filter([$this->year(), $this->make(), $this->model(), $this->styleName()]));
     }
 
     public function color(): ?ADSColor
@@ -131,6 +136,45 @@ class ADSResponse
     public function model(): ?string
     {
         return $this->response->style->model->_ ?? null;
+    }
+
+    public function engine(): ?array
+    {
+        if (!isset($this->response->engine)) {
+            return null;
+        }
+
+        return [
+            'type' => $this->response->engine->engineType->_,
+            'fuel' => $this->response->engine->fuelType->_,
+            'horsepower' => (array) $this->response->engine->horsepower,
+            'torque' => (array) $this->response->engine->netTorque,
+            'cylinders' => $this->response->engine->cylinders,
+            'displacement' => [
+                'value' => $this->response->engine->displacement->value->_,
+                'unit' =>  $this->response->engine->displacement->value->unit,
+            ],
+            'fuelEconomy' => [
+                'city' => $this->response->engine->fuelEconomy->city->low,
+                'hwy' => $this->response->engine->fuelEconomy->hwy->low,
+                'unit' => $this->response->engine->fuelEconomy->unit,
+            ],
+            'fuelCapacity' => [
+                'value' => $this->response->engine->fuelCapacity->low,
+                'unit' => $this->response->engine->fuelCapacity->unit,
+            ],
+        ];
+    }
+
+    public function standardFeatures(): array
+    {
+        $standardFeatures = [];
+
+        foreach ($this->response->standard as $feature) {
+            $standardFeatures[ucfirst(strtolower($feature->header->_))][] = $feature->description;
+        }
+
+        return $standardFeatures;
     }
 
     public function bodyStyle(): ?array
@@ -201,30 +245,26 @@ class ADSResponse
 
     /**
      * Takes provided drivetrain and standardizes it to a 3 letter abbreviation
-     * @param string $drivetrain Drivetrain provided for a vehicle
+     * @param string $driveTrain Drivetrain provided for a vehicle
      * @return string
      */
-    public static function convertDrivetrain(?string $drivetrain): ?string
+    public static function convertDriveTrain(?string $driveTrain): ?string
     {
-        $drivetrain = trim(strtolower($drivetrain));
+        $driveTrain = trim(strtolower($driveTrain));
 
-        if (!$drivetrain) {
+        if (static::startsWith($driveTrain, 'front')) {
+            $driveTrain = 'fwd';
+        } elseif (static::startsWith($driveTrain, 'rear')) {
+            $driveTrain = 'rwd';
+        } elseif (static::startsWith($driveTrain, 'four')) {
+            $driveTrain = '4wd';
+        } elseif (static::startsWith($driveTrain, 'all')) {
+            $driveTrain = 'awd';
+        } elseif (!in_array($driveTrain, ['fwd', 'rwd', '4wd', 'awd'])) {
             return null;
         }
 
-        if (strlen($drivetrain) > 3) {
-            if (static::startsWith($drivetrain, 'front')) {
-                $drivetrain = 'fwd';
-            } elseif (static::startsWith($drivetrain, 'rear')) {
-                $drivetrain = 'rwd';
-            } elseif (static::startsWith($drivetrain, 'four')) {
-                $drivetrain = '4x4';
-            } elseif (static::startsWith($drivetrain, 'all')) {
-                $drivetrain = 'awd';
-            }
-        }
-
-        return strtoupper(in_array(strtolower($drivetrain), ['4wd', '4x4']) ? '4X4' : $drivetrain);
+        return strtoupper($driveTrain);
     }
 
     /**
