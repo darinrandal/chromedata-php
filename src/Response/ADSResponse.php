@@ -196,7 +196,7 @@ class ADSResponse
         return $genericEquipment;
     }
 
-    public function consumerInfo(): array
+    public function consumerInfo(?\Closure $itemCallback = null): array
     {
         $consumerInfo = [];
 
@@ -204,7 +204,9 @@ class ADSResponse
             $items = [];
 
             foreach ((array) $info->item as $item) {
-                $items[] = $item->name . ': ' . $item->value;
+                $items[] = $itemCallback !== null ?
+                    $itemCallback($item) :
+                    $item->name . ': ' . $item->value;
             }
 
             $consumerInfo[$info->type->_] = $items;
