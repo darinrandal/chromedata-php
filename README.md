@@ -10,7 +10,7 @@ $auth = new \Darinrandal\ChromeData\Credentials('<ACCOUNT_NUMBER>', '<ACCOUNT_SE
 $adapter = new \Darinrandal\ChromeData\Adapter\Guzzle($auth);
 $adsRequest = new \Darinrandal\ChromeData\Request\ADS($adapter);
 
-$response = $adsRequest->byVin('5TDZT38A91S055073');
+$response = $adsRequest->byVin('<VIN>');
 
 var_dump([
     'year' => $response->year(),
