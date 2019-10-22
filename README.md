@@ -6,7 +6,7 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
-$auth = new \Darinrandal\ChromeData\Credentials('123456', 'abcdefghijk123456');
+$auth = new \Darinrandal\ChromeData\Credentials('<ACCOUNT_NUMBER>', '<ACCOUNT_SECRET>');
 $adapter = new \Darinrandal\ChromeData\Adapter\Guzzle($auth);
 $adsRequest = new \Darinrandal\ChromeData\Request\ADS($adapter);
 
