@@ -20,6 +20,20 @@ class ADSResponse
     protected $status;
 
     /**
+     * Parsed standard features
+     *
+     * @var array
+     */
+    protected $standardFeatures = [];
+
+    /**
+     * Transmission type
+     *
+     * @var string
+     */
+    protected $transmissionType;
+
+    /**
      * 320x240 images
      */
     const PHOTO_SIZE_SMALL = 320;
@@ -174,15 +188,40 @@ class ADSResponse
         ];
     }
 
+    /**
+     * Parse the standard features from the response
+     *
+     * @return array
+     */
     public function standardFeatures(): array
     {
-        $standardFeatures = [];
+        // Ignore if already standard features extracted
+        if(sizeof($this->standardFeatures) > 0)
+            return $this->standardFeatures;
 
         foreach ($this->response->standard as $feature) {
-            $standardFeatures[ucfirst(strtolower($feature->header->_))][] = $feature->description;
+            $this->standardFeatures[ucfirst(strtolower($feature->header->_))][] = $feature->description;
+
+            // Store the transmission type
+            if(strpos(strtolower($feature->description), "automatic transmission"))
+                $this->transmissionType = "Automatic";
+            elseif(strpos(strtolower($feature->description), "manual transmission"))
+                $this->transmissionType =  "Manual";
+            elseif(strpos(strtolower($feature->description), "continuously variable transmission"))
+                $this->transmissionType =  "CVT";
         }
 
-        return $standardFeatures;
+        return $this->standardFeatures;
+    }
+
+    /**
+     * Get the transmission type
+     *
+     * @return string
+     */
+    public function getTransmission() : string
+    {
+        return $this->transmissionType ?? "Unspecified";
     }
 
     public function genericEquipment(): array
