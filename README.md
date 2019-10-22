@@ -12,21 +12,15 @@ $adsRequest = new \Darinrandal\ChromeData\Request\ADS($adapter);
 
 $response = $adsRequest->byVin('1FTEW1EG9JFB51465', [
     'trim' => 'king ranch lo',
-    'exterior_color' => 'oxford',
     'wheelbase' => 157,
 ]);
 
-$color = $response->matchExteriorColor();
-
 var_dump([
-    'photos' => $response->colorMatchedPhotos($color),
-    'exterior_color' => $color->getColorName(),
-    'exterior_color_base' => $color->getColorBase(),
-    'year' => $response->vehicleYear(),
-    'make' => $response->vehicleMake(),
-    'model' => $response->vehicleModel(),
-    'trim' => $response->vehicleTrim(),
-    'drivetrain' => $response->vehicleDrivetrain(),
+    'year' => $response->year(),
+    'make' => $response->make(),
+    'model' => $response->model(),
+    'trim' => $response->trim(),
+    'drivetrain' => $response->drivetrain(),
 ]);
 ```
 
@@ -34,32 +28,6 @@ Above code will properly return color-matched photos and autocorrected informati
 
 ```
 array(8) {
-  ["photos"]=>array(2) {
-    [0]=>
-    array(4) {
-      ["colorCode"]=>
-      string(2) "YZ"
-      ["shot"]=>
-      int(1)
-      ["url"]=>
-      string(181) "http://media.chromedata.com/MediaGallery/media/Mjk2MjIxXk1lZGlhIEdhbGxlcnk/pCIEWZJxPLFV8BU94ufZzJ0TAc7BGeX17cAXcxAFP6HAmNjPM6AaqRmA_Hd1tdCauGGKOZNDdJo/cc_2018FOT110002_01_640_YZ.png"
-      ["secondaryColorCode"]=>
-      string(0) ""
-    }
-    [1]=>
-    array(4) {
-      ["colorCode"]=>
-      string(2) "YZ"
-      ["shot"]=>
-      int(3)
-      ["url"]=>
-      string(167) "http://media.chromedata.com/MediaGallery/media/Mjk2MjIxXk1lZGlhIEdhbGxlcnk/pCIEWZJxPLFV8BU94ufZzPOupQd-9JmfVsN47LbxrS5yHanAfRZaZymdM_N6dZQm/cc_2018FOT110002_640_YZ.png"
-      ["secondaryColorCode"]=>
-      string(0) ""
-    }
-  }
-  ["exterior_color"]=>string(12) "Oxford White"
-  ["exterior_color_base"]=>string(5) "White"
   ["year"]=>string(4) "2018"
   ["make"]=>string(4) "Ford"
   ["model"]=>string(5) "F-150"
